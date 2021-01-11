@@ -68,6 +68,7 @@ const (
 	initArgNodePortIPv6Addrs
 	initArgNrCPUs
 	initArgEndpointRoutes
+	initArgProxyRule
 	initArgMax
 )
 
@@ -347,6 +348,12 @@ func (l *Loader) Reinitialize(ctx context.Context, o datapath.BaseProgramOwner, 
 		args[initArgEndpointRoutes] = "true"
 	} else {
 		args[initArgEndpointRoutes] = "false"
+	}
+
+	if option.Config.InstallIptRules {
+		args[initArgProxyRule] = "true"
+	} else {
+		args[initArgProxyRule] = "false"
 	}
 
 	clockSource := []string{"ktime", "jiffies"}

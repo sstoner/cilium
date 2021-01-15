@@ -160,6 +160,11 @@ github.com/cilium/proxy/go/envoy/type/tracing/v3
 github.com/cilium/proxy/go/envoy/type/v3
 # github.com/cncf/udpa/go v0.0.0-20191230090109-edbea6a78f6d
 github.com/cncf/udpa/go/udpa/annotations
+# github.com/containerd/containerd v1.4.3
+## explicit
+github.com/containerd/containerd/errdefs
+github.com/containerd/containerd/log
+github.com/containerd/containerd/platforms
 # github.com/containernetworking/cni v0.7.1
 ## explicit
 github.com/containernetworking/cni/pkg/skel
@@ -188,7 +193,7 @@ github.com/dimchansky/utfbom
 github.com/docker/distribution/digestset
 github.com/docker/distribution/reference
 github.com/docker/distribution/registry/api/errcode
-# github.com/docker/docker v0.7.3-0.20190327010347-be7ac8be2ae0
+# github.com/docker/docker v20.10.2+incompatible
 ## explicit
 github.com/docker/docker/api
 github.com/docker/docker/api/types
@@ -439,7 +444,7 @@ github.com/mattn/go-isatty
 github.com/mattn/go-shellwords
 # github.com/matttproud/golang_protobuf_extensions v1.0.2-0.20181231171920-c182affec369
 github.com/matttproud/golang_protobuf_extensions/pbutil
-# github.com/miekg/dns v1.0.14 => github.com/cilium/dns v1.1.4-0.20190417235132-8e25ec9a0ff3
+# github.com/miekg/dns v1.1.25 => github.com/cilium/dns v1.1.4-0.20190417235132-8e25ec9a0ff3
 ## explicit
 github.com/miekg/dns
 # github.com/mitchellh/go-homedir v1.1.0

@@ -1,6 +1,6 @@
 # gofat - List size of golang dependencies
 
-Based on https://github.com/jondot/fattyproject/blob/master/gofat and adjusted to work with go 1.11 (more or less)
+Based on gofat and adjusted to work with go 1.11 (more or less)
 
 ## Example
 

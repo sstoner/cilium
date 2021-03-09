@@ -70,7 +70,7 @@ function save_image() {
 # envoy/nginx/busybox multi-arch-support
 save_image hubble-ui v0.7.3 v0.7.3
 save_image hubble-ui-backend v0.7.3-${GOARCH} v0.7.3
-save_image envoy v1.16.0 v1.16.0
+save_image envoy v1.14.5 v1.14.5
 # nginx and busybox used to test
 save_image nginx latest latest
 save_image busybox latest latest

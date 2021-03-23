@@ -84,7 +84,7 @@ affinity:
       nodeSelectorTerms:
       - matchExpressions:
         - key: node.infra.tce.io/lifecycle
-           NotInoperator:
+          operator: NotIn
           values:
             - maintain
 

@@ -1,0 +1,34 @@
+# Default values for kube-proxy-cilium.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+# override by --set tcs.apiserver=""
+tcs:
+  apiserver: https://127.0.0.1:6443
+
+name: kube-proxy-cilium
+
+image:
+  repository: registry.tce.com/infra/kube-proxy
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: v1.16.6-db03827a
+
+serviceAccount:
+  name: kube-proxy
+
+clusterroleBinding:
+  name: kube-proxy
+
+configMap:
+  name: kube-proxy
+
+affinity:
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: node.infra.tce.io/lifecycle
+              operator: NotIn
+              values:
+                - maintain

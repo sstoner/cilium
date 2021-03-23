@@ -5,6 +5,9 @@
 # ex: 1.7, 1.8, 1.9
 # upgradeCompatibility: 1.8
 
+tcs:
+  tolerations: []
+
 debug:
   enabled: false
   # verbose:
@@ -76,6 +79,14 @@ affinity:
           values:
           - cilium
       topologyKey: kubernetes.io/hostname
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: node.infra.tce.io/lifecycle
+           NotInoperator:
+          values:
+            - maintain
 
 ## agent priorityClassName
 ##

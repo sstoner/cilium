@@ -261,7 +261,7 @@ cni:
   #  - generic-veth
   #  - aws-cni
   #  - portmap
-  chainingMode: none
+  chainingMode: portmap
 
   # customConf skips writing of the CNI configuration. This can be used if
   # writing of the CNI configuration is performed by external automation.

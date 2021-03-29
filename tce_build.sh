@@ -30,6 +30,7 @@ fi
 rm -rf $TCE_BUILD_DIR && mkdir -p $TCE_BUILD_DIR
 
 TAG=v1.9.0
+CNI_PLUGIN_VERSION=v0.8.7
 KUBE_PROXY_TAG=v1.16.6
 GIT_SHA=$(git rev-parse --short HEAD)
 VERSION=${TAG}-${GIT_SHA}-${GOARCH}
@@ -38,12 +39,14 @@ CILIUM_OPERATOR_IMAGE=${REGISTRY}/cilium-operator-generic:${VERSION}
 HUBBLE_RELAY_IMAGE=${REGISTRY}/cilium-hubble-relay:${VERSION}
 
 # ******** global variables end ********
+# download plugins
 if [ x"${TCE_ARCH-}" = x"arm" ]; then
     wget -O tcs-build/qemu-aarch64-static https://github.com/multiarch/qemu-user-static/releases/download/v3.0.0/qemu-aarch64-static
 fi
+wget -O tcs-build/cni-plugins.tgz https://github.com/containernetworking/plugins/releases/download/${CNI_PLUGIN_VERSION}/cni-plugins-linux-${GOARCH}-${CNI_PLUGIN_VERSION}.tgz
+tar xvf tcs-build/cni-plugins.tgz -C tcs-build
 
 # make cilium image
-
 curl --fail --show-error --silent --location "https://github.com/cilium/hubble/releases/download/v0.7.1/hubble-linux-${GOARCH}.tar.gz" --output "/tmp/hubble.tgz"
 tar -C "./tcs-build" -xf "/tmp/hubble.tgz" hubble
 docker build -f tcs-build/cilium-${GOARCH}.Dockerfile -t ${CILIUM_IMAGE} .

@@ -15,8 +15,9 @@ RUN export CC=aarch64-linux-gnu-gcc && \
     build-container install-container licenses-all
 
 FROM mirrors.tencent.com/tcs-infra/cilium-runtime:7f84e5f2c9027e75b271a460d83c086f29127d3a
-COPY --from=cilium-envoy / /
+COPY ./tcs-build/portmap /opt/cni/bin/
 COPY ./tcs-build/hubble /usr/bin/hubble
+COPY --from=cilium-envoy / /
 COPY --from=builder /tmp/install /
 COPY --from=builder /go/src/github.com/cilium/cilium/plugins/cilium-cni/cni-install.sh /cni-install.sh
 COPY --from=builder /go/src/github.com/cilium/cilium/plugins/cilium-cni/cni-uninstall.sh /cni-uninstall.sh

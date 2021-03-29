@@ -12,8 +12,9 @@ RUN make PKG_BUILD=1 SKIP_DOCS=true GOARCH=amd64 DESTDIR=/tmp/install \
     build-container install-container licenses-all
 
 FROM mirrors.tencent.com/tcs-infra/cilium-runtime:2020-11-09-v1.9
-COPY --from=cilium-envoy / /
+COPY ./tcs-build/portmap /opt/cni/bin/
 COPY ./tcs-build/hubble /usr/bin/hubble
+COPY --from=cilium-envoy / /
 COPY --from=builder /tmp/install /
 COPY --from=builder /go/src/github.com/cilium/cilium/plugins/cilium-cni/cni-install.sh /cni-install.sh
 COPY --from=builder /go/src/github.com/cilium/cilium/plugins/cilium-cni/cni-uninstall.sh /cni-uninstall.sh

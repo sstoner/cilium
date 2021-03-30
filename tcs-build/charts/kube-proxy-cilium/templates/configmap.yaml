@@ -53,7 +53,7 @@ data:
     clusters:
     - cluster:
         certificate-authority: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
-        server: {{ .Values.tcs.apiserver }}
+        server: {{ .Values.tcs.apiServer }}
       name: default
     contexts:
     - context:

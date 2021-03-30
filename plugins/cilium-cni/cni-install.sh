@@ -45,6 +45,7 @@ while test $# -gt 0; do
 done
 
 BIN_NAME=cilium-cni
+PORTMAP_NAME=portmap
 CNI_DIR=${CNI_DIR:-${HOST_PREFIX}/opt/cni}
 CILIUM_CNI_CONF=${CILIUM_CNI_CONF:-${HOST_PREFIX}/etc/cni/net.d/${CNI_CONF_NAME}}
 
@@ -68,8 +69,13 @@ if [ -f "${CNI_DIR}/bin/${BIN_NAME}" ]; then
 	rm -f ${CNI_DIR}/bin/${BIN_NAME}.old || true
 	mv ${CNI_DIR}/bin/${BIN_NAME} ${CNI_DIR}/bin/${BIN_NAME}.old
 fi
-
 cp /opt/cni/bin/${BIN_NAME} ${CNI_DIR}/bin/
+
+if [ -f "${CNI_DIR}/bin/${PORTMAP_NAME}" ]; then
+	rm -f ${CNI_DIR}/bin/${PORTMAP_NAME}.old || true
+	mv ${CNI_DIR}/bin/${PORTMAP_NAME} ${CNI_DIR}/bin/${PORTMAP_NAME}.old
+fi
+cp /opt/cni/bin/${PORTMAP_NAME} ${CNI_DIR}/bin/
 
 if [ "${CILIUM_CUSTOM_CNI_CONF}" = "true" ]; then
 	echo "Using custom ${CILIUM_CNI_CONF}..."

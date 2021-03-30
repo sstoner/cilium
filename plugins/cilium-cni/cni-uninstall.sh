@@ -28,11 +28,14 @@ function get_list_of_veth_from_bridge() {
 
 HOST_PREFIX=${HOST_PREFIX:-/host}
 BIN_NAME=cilium-cni
+PORTMAP_NAME=portmap
 CNI_DIR=${CNI_DIR:-${HOST_PREFIX}/opt/cni}
 
 echo "Removing ${CNI_DIR}/bin/cilium-cni..."
 rm -f ${CNI_DIR}/bin/${BIN_NAME}
 rm -f ${CNI_DIR}/bin/${BIN_NAME}.old
+rm -f ${CNI_DIR}/bin/${PORTMAP_NAME}
+rm -f ${CNI_DIR}/bin/${PORTMAP_NAME}.old
 
 if [[ "${CILIUM_FLANNEL_UNINSTALL_ON_EXIT}" == "true" ]]; then
     echo "Removing BPF programs from all containers and from ${CILIUM_FLANNEL_MASTER_DEVICE}"

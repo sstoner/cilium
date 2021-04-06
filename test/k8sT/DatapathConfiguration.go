@@ -481,6 +481,52 @@ var _ = Describe("K8sDatapathConfig", func() {
 		})
 	})
 
+	SkipContextIf(helpers.DoesNotRunOnNetNextKernel, "Wireguard encryption", func() {
+		It("Pod2pod is encrypted", func() {
+			deploymentManager.DeployCilium(map[string]string{
+				"tunnel":               "disabled",
+				"autoDirectNodeRoutes": "true",
+				"wireguard.enabled":    "true",
+				"l7Proxy":              "false",
+			}, DeployCiliumOptionsAndDNS)
+
+			randomNamespace := deploymentManager.DeployRandomNamespaceShared(DemoDaemonSet)
+			deploymentManager.WaitUntilReady()
+
+			srcPod, srcPodJSON := fetchPodsWithOffset(kubectl, randomNamespace, "client", "zgroup=testDSClient", "", true, 2)
+			srcPodIP, err := srcPodJSON.Filter("{.status.podIP}")
+			ExpectWithOffset(1, err).Should(BeNil(), "Failure to retrieve pod IP %s", srcPod)
+			srcHost, err := srcPodJSON.Filter("{.status.hostIP}")
+			ExpectWithOffset(1, err).Should(BeNil(), "Failure to retrieve host of pod %s", srcPod)
+
+			dstPod, dstPodJSON := fetchPodsWithOffset(kubectl, randomNamespace, "server", "zgroup=testDS", srcHost.String(), true, 2)
+			dstPodIP, err := dstPodJSON.Filter("{.status.podIP}")
+			ExpectWithOffset(1, err).Should(BeNil(), "Failure to retrieve IP of pod %s", dstPod)
+
+			privateIface, err := kubectl.GetPrivateIface()
+			Expect(err).Should(BeNil(), "Cannot determine private iface")
+			k8s1NodeName, _ := kubectl.GetNodeInfo(helpers.K8s1)
+			k8s2NodeName, _ := kubectl.GetNodeInfo(helpers.K8s2)
+			cmd := fmt.Sprintf("tcpdump -i %s --immediate-mode -n 'host %s and host %s' -c 1", privateIface, srcPodIP, dstPodIP)
+
+			res1, cancel1, err := kubectl.ExecInHostNetNSInBackground(context.TODO(), k8s1NodeName, cmd)
+			Expect(err).Should(BeNil(), "Cannot exec tcpdump in bg")
+
+			res2, cancel2, err := kubectl.ExecInHostNetNSInBackground(context.TODO(), k8s2NodeName, cmd)
+			Expect(err).Should(BeNil(), "Cannot exec tcpdump in bg")
+
+			// HTTP connectivity test
+			kubectl.ExecPodCmd(randomNamespace, srcPod,
+				helpers.CurlFail("http://%s:80/", dstPodIP)).ExpectSuccess("Failed to curl dst pod")
+
+			// Check that no unencrypted pod2pod traffic was captured on the direct routing device
+			cancel1()
+			cancel2()
+			Expect(strings.Contains(res1.CombineOutput().String(), "1 packet captured")).Should(Equal(false))
+			Expect(strings.Contains(res2.CombineOutput().String(), "1 packet captured")).Should(Equal(false))
+		})
+	})
+
 	Context("Sockops performance", func() {
 		directRoutingOptions := map[string]string{
 			"tunnel":               "disabled",

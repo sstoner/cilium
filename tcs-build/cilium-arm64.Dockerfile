@@ -14,7 +14,7 @@ RUN export CC=aarch64-linux-gnu-gcc && \
     make PKG_BUILD=1 GOARCH=arm64 SKIP_DOCS=true DESTDIR=/tmp/install \
     build-container install-container licenses-all
 
-FROM mirrors.tencent.com/tcs-infra/cilium-runtime:7f84e5f2c9027e75b271a460d83c086f29127d3a
+FROM mirrors.tencent.com/tcs-infra/cilium-runtime-arm64:tcs-v2.1.0
 COPY ./tcs-build/portmap /opt/cni/bin/
 COPY ./tcs-build/hubble /usr/bin/hubble
 COPY --from=cilium-envoy / /

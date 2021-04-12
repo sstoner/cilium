@@ -1383,7 +1383,7 @@ enableCriticalPriorityClass: true
 
 # disableEnvoyVersionCheck removes the check for Envoy, which can be useful on
 # AArch64 as the images do not currently ship a version of Envoy.
-#disableEnvoyVersionCheck: false
+disableEnvoyVersionCheck: true
 
 # clustermesh-apiserver is created if externalWorkloads are enabled or clustermesh.useAPIServer is not false
 clustermesh:

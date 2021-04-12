@@ -1,6 +1,6 @@
 #### Base image copy from master branch: https://github.com/cilium/cilium/blob/master/images/cilium/Dockerfile
 # envoy
-FROM mirrors.tencent.com/tcs-infra/cilium-envoy:1bfbbd9c85907c5667f1abd24b7a6c1b5d8bbf29 as cilium-envoy
+FROM mirrors.tencent.com/tcs-infra/cilium-envoy:1bfbbd9c85907c5667f1abd24b7a6c1b5d8bbf29-arm64 as cilium-envoy
 
 #
 # cilium builer

@@ -217,10 +217,10 @@ func (l *Loader) reinitializeIPSec(ctx context.Context) error {
 	return nil
 }
 
-func (l *Loader) ReinitializeXDP(ctx context.Context) error {
+func (l *Loader) ReinitializeXDP(ctx context.Context, extraCArgs []string) error {
 	maybeUnloadObsoleteXDPPrograms(option.Config.XDPDevice, option.Config.XDPMode)
 	if option.Config.XDPDevice != "undefined" {
-		if err := compileAndLoadXDPProg(ctx, option.Config.XDPDevice, option.Config.XDPMode); err != nil {
+		if err := compileAndLoadXDPProg(ctx, option.Config.XDPDevice, option.Config.XDPMode, extraCArgs); err != nil {
 			return err
 		}
 	}
@@ -421,7 +421,8 @@ func (l *Loader) Reinitialize(ctx context.Context, o datapath.BaseProgramOwner, 
 	ctx, cancel := context.WithTimeout(ctx, defaults.ExecTimeout)
 	defer cancel()
 
-	if err := l.ReinitializeXDP(ctx); err != nil {
+	extraArgs := []string{"-Dcapture_enabled=0"}
+	if err := l.ReinitializeXDP(ctx, extraArgs); err != nil {
 		log.WithError(err).Fatal("Failed to compile XDP program")
 	}
 

@@ -7,7 +7,6 @@ metadata:
     k8s-app: hubble-relay
   namespace: {{ .Release.Namespace }}
 spec:
-
   replicas: {{ .Values.hubble.relay.replicas }}
   selector:
     matchLabels:
@@ -83,7 +82,7 @@ spec:
       nodeSelector:
         {{- toYaml . | trim | nindent 8 }}
 {{- end }}
-{{- with .Values.hubble.relay.tolerations }}
+{{- with .Values.tcs.tolerations }}
       tolerations:
       {{- toYaml . | trim | nindent 8 }}
 {{- end }}

@@ -5,6 +5,9 @@
 # ex: 1.7, 1.8, 1.9
 # upgradeCompatibility: 1.8
 
+tcs:
+  tolerations: []
+
 debug:
   enabled: false
   # verbose:
@@ -62,7 +65,7 @@ name: cilium
 ## agent container image
 ##
 image:
-  repository: quay.io/cilium/cilium
+  repository: registry.tce.com/infra/cilium
   tag: v1.9.0
   pullPolicy: IfNotPresent
 
@@ -76,6 +79,14 @@ affinity:
           values:
           - cilium
       topologyKey: kubernetes.io/hostname
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: node.infra.tce.io/lifecycle
+          operator: NotIn
+          values:
+            - maintain
 
 ## agent priorityClassName
 ##
@@ -180,7 +191,7 @@ bpf:
   clockProbe: false
   # waitForMount instructs the cilium-agent DaemoNSet to wait in an
   # initContainer until the BPF filesystem has been mounted.
-  waitForMount: false
+  waitForMount: true
 
   # preallocateMaps enables pre allocation of BPF map values. This increases
   # memory usage but can reduce latency.
@@ -220,7 +231,7 @@ bpf:
   monitorFlags: "all"
 
   # TODO: Add documentation
-  #masquerade: true
+  masquerade: false
 
   # tproxy enables the use of eBPF-based TPROXY to reduce reliance on iptables
   # rules for implementing Layer 7 policy.
@@ -250,7 +261,7 @@ cni:
   #  - generic-veth
   #  - aws-cni
   #  - portmap
-  chainingMode: none
+  chainingMode: portmap
 
   # customConf skips writing of the CNI configuration. This can be used if
   # writing of the CNI configuration is performed by external automation.
@@ -304,6 +315,10 @@ containerRuntime:
 
 # TODO: Add documentation
 datapathMode: veth
+
+# mtu used to configure cilium interface, default 1500 would make packet
+# loss in bpf nat scenes.
+mtu: 1480
 
 # TODO: Add documentation
 daemon:
@@ -426,7 +441,7 @@ hostServices:
 certgen:
   # certgen image used in the job pod spec
   image:
-    repository: quay.io/cilium/certgen
+    repository: registry.tce.com/infra/certgen
     tag: v0.1.3
     pullPolicy: IfNotPresent
   # Seconds after which the completed job pod will be deleted
@@ -481,14 +496,14 @@ hubble:
   # An additional address for Hubble to listen to.
   # Set this field ":4244" if you are enabling Hubble Relay, as it assumes that
   # Hubble is listening on port 4244.
-  # listenAddress: ":4244"
+  listenAddress: ":4244"
 
   # TLS configuration for Hubble
   tls:
     # Enable mutual TLS for listenAddress. Setting this value to false is
     # highly discouraged as the Hubble API provides access to potentially
     # sensitive network flow metadata and is exposed on the host network.
-    enabled: true
+    enabled: false
     # Configure automatic TLS certificates generation.
     auto:
       # When set to true, automatically generate a CA and certificates to
@@ -527,10 +542,10 @@ hubble:
   # Configuration for Hubble Relay
   relay:
     # Enable Hubble Relay (requires hubble.enabled=true)
-    enabled: false
+    enabled: true
 
     image:
-      repository: quay.io/cilium/hubble-relay
+      repository: registry.tce.com/infra/cilium-hubble-relay
       tag: v1.9.0
       pullPolicy: IfNotPresent
 
@@ -538,7 +553,7 @@ hubble:
     # resources: {}
 
     # Number of replicas run for the hubble-relay deployment.
-    replicas: 1
+    replicas: 2
 
     # Node labels for pod assignment
     # ref: https://kubernetes.io/docs/user-guide/node-selection/
@@ -612,11 +627,11 @@ hubble:
     # servicePort: 80
 
   ui:
-    enabled: false
+    enabled: true
 
     backend:
       image:
-        repository: quay.io/cilium/hubble-ui-backend
+        repository: registry.tce.com/infra/hubble-ui-backend
         tag: v0.7.3
         pullPolicy: IfNotPresent
       # Resource requests and limits for the 'hubble-ui' container of the 'hubble-ui' deployment, such as
@@ -631,7 +646,7 @@ hubble:
 
     frontend:
       image:
-        repository: quay.io/cilium/hubble-ui
+        repository: registry.tce.com/infra/hubble-ui
         tag: v0.7.3
         pullPolicy: IfNotPresent
       # Resource requests and limits for the 'hubble-ui' container of the 'hubble-ui' deployment, such as
@@ -646,8 +661,8 @@ hubble:
 
     proxy:
       image:
-        repository: docker.io/envoyproxy/envoy
-        tag: v1.14.5
+        repository: registry.tce.com/infra/envoy
+        tag: v1.16.0
         pullPolicy: IfNotPresent
       # Resource requests and limits for the 'hubble-ui' container of the 'hubble-ui' deployment, such as
       #     resources:
@@ -714,11 +729,11 @@ identityAllocationMode: "crd"
 # TPROXY (L7 proxy injection), itpables based masquerading and compatibility
 # with kube-proxy. See documentation for details on when this can be
 # disabled.
-installIptablesRules: true
+installIptablesRules: false
 
 # TODO: Add documentation
 ipam:
-  mode: "cluster-pool"
+  mode: "kubernetes"
   operator:
     clusterPoolIPv4PodCIDR: "10.0.0.0/8"
     clusterPoolIPv4MaskSize: 24
@@ -766,7 +781,7 @@ keepDeprecatedLabels: false
 keepDeprecatedProbes: false
 
 # kubeProxyReplacement enables kube-proxy replacement in Cilium BPF datapath
-kubeProxyReplacement: "probe"
+kubeProxyReplacement: "partial"
 
 # kubeProxyReplacement healthz server bind address
 # To enable set the value to '0.0.0.0:10256' for all ipv4
@@ -781,7 +796,7 @@ kvstore:
   ssl:
 
 # l7Proxy enables Layer 7 network policy.
-l7Proxy: true
+l7Proxy: false
 
 localRedirectPolicy: false
 
@@ -806,7 +821,7 @@ maglev: {}
 
 # masquerade enables masquerading of traffic leaving the node for
 # destinations outside of the cluster.
-masquerade: true
+masquerade: false
 
 # nativeRoutingCIDR allows to explicitly specify the CIDR for native routing. This
 # value corresponds to the configured cluster-cidr.
@@ -857,11 +872,11 @@ nodePort:
 # pprof is the GO pprof configuration
 pprof:
   # enabled enables go pprof debugging
-  enabled: false
+  enabled: true
 
 # prometheus enables serving metrics on the configured port at /metrics
 prometheus:
-  enabled: false
+  enabled: true
   port: 9090
   # serviceMonitor enables the required service monitors to be used with
   # Prometheus
@@ -899,7 +914,7 @@ resourceQuotas:
 
 # Need to document default
 ##################
-#sessionAffinity: false
+sessionAffinity: true
 
 # Do not run Cilium agent when running with clean mode. Useful to completely
 # uninstall Cilium as it will stop Cilium from starting and create artifacts
@@ -917,7 +932,7 @@ sockops:
 # synchronizeK8sNodes: true
 
 tls:
-  enabled: true
+  enabled: false
   secretsBackend: local
 
 # tunnel is the encapsulation configuration for communication between nodes
@@ -925,7 +940,7 @@ tls:
 #   - disabled
 #   - vxlan (default)
 #   - geneve
-tunnel: "vxlan"
+tunnel: "disabled"
 
 wellKnownIdentities:
   # enabled enables the use of well-known identities
@@ -936,7 +951,7 @@ etcd:
   enabled: false
 
   image:
-    repository: quay.io/cilium/cilium-etcd-operator
+    repository: registry.tce.com/infra/cilium-etcd-operator
     tag: v2.0.7
     pullPolicy: IfNotPresent
 
@@ -1046,7 +1061,7 @@ operator:
   enabled: true
 
   image:
-    repository: quay.io/cilium/operator
+    repository: registry.tce.com/infra/cilium-operator
     tag: v1.9.0
     pullPolicy: IfNotPresent
 
@@ -1079,7 +1094,7 @@ operator:
         topologyKey: kubernetes.io/hostname
 
 
-  
+
   ## Additional cilium-etcd-operator container arguments
   ##
   extraArgs: {}
@@ -1171,7 +1186,7 @@ nodeinit:
   enabled: false
 
   image:
-    repository: quay.io/cilium/startup-script
+    repository: registry.tce.com/infra/startup-script
     tag: 62bfbe88c17778aad7bef9fa57ff9e2d4a9ba0d8
     pullPolicy: IfNotPresent
 
@@ -1260,7 +1275,7 @@ preflight:
   enabled: false
 
   image:
-    repository: quay.io/cilium/cilium
+    repository: registry.tce.com/infra/cilium
     tag: v1.9.0
     pullPolicy: IfNotPresent
 
@@ -1368,7 +1383,7 @@ enableCriticalPriorityClass: true
 
 # disableEnvoyVersionCheck removes the check for Envoy, which can be useful on
 # AArch64 as the images do not currently ship a version of Envoy.
-#disableEnvoyVersionCheck: false
+disableEnvoyVersionCheck: true
 
 # clustermesh-apiserver is created if externalWorkloads are enabled or clustermesh.useAPIServer is not false
 clustermesh:
@@ -1377,13 +1392,13 @@ clustermesh:
 
   apiserver:
     image:
-      repository: quay.io/cilium/clustermesh-apiserver
+      repository: registry.tce.com/infra/clustermesh-apiserver
       tag: v1.9.0
       pullPolicy: IfNotPresent
 
     etcd:
       image:
-        repository: quay.io/coreos/etcd
+        repository: registry.tce.com/infra/etcd
         tag: v3.4.13
         pullPolicy: IfNotPresent
 

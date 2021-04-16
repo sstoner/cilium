@@ -2,17 +2,17 @@ apiVersion: apps/v1
 kind: DaemonSet
 metadata:
   labels:
-    k8s-app: {{ .Values.name }}
+    k8s-app: kube-proxy
   name: {{ .Values.name }}
   namespace: {{ .Release.Namespace }}
 spec:
   selector:
     matchLabels:
-      k8s-app: {{ .Values.name }}
+      k8s-app: kube-proxy-cilium
   template:
     metadata:
       labels:
-        k8s-app: {{ .Values.name }}
+        k8s-app: kube-proxy-cilium
     spec:
 {{- if .Values.affinity }}
       affinity:

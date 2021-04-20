@@ -1191,7 +1191,7 @@ func CreateConfiguration(metricsEnabled []string) (Configuration, []prometheus.C
 				Subsystem: SubsystemBPF,
 				Name:      "map_ops_total",
 				Help:      "Total operations on map, tagged by map name",
-			}, []string{LabelMapName, LabelMapNameDeprecated, LabelOperation, LabelOutcome})
+			}, []string{LabelMapName, LabelOperation, LabelOutcome})
 
 			collectors = append(collectors, BPFMapOps)
 			c.BPFMapOps = true

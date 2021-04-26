@@ -30,7 +30,7 @@ spec:
       nodeSelector:
         {{- toYaml . | trim | nindent 8 }}
 {{- end }}
-{{- with .Values.hubble.ui.tolerations }}
+{{- with .Values.tcs.tolerations }}
       tolerations:
       {{- toYaml . | trim | nindent 6 }}
 {{- end }}

@@ -29,14 +29,14 @@ fi
 
 rm -rf $TCE_BUILD_DIR && mkdir -p $TCE_BUILD_DIR
 
-TAG=v1.9.0
+CILIUM_TAG=v1.9.0
 CNI_PLUGIN_VERSION=v0.8.7
 KUBE_PROXY_TAG=v1.16.6
-GIT_SHA=$(git rev-parse --short HEAD)
-VERSION=${TAG}-${GIT_SHA}-${GOARCH}
-CILIUM_IMAGE=${REGISTRY}/cilium:${VERSION}
-CILIUM_OPERATOR_IMAGE=${REGISTRY}/cilium-operator-generic:${VERSION}
-HUBBLE_RELAY_IMAGE=${REGISTRY}/cilium-hubble-relay:${VERSION}
+CILIUM_GIT_SHA=$(git rev-parse --short HEAD)
+CILIUM_VERSION=${CILIUM_TAG}-${CILIUM_GIT_SHA}
+CILIUM_IMAGE=${REGISTRY}/cilium:${CILIUM_VERSION}
+CILIUM_OPERATOR_IMAGE=${REGISTRY}/cilium-operator-generic:${CILIUM_VERSION}
+HUBBLE_RELAY_IMAGE=${REGISTRY}/cilium-hubble-relay:${CILIUM_VERSION}
 
 # ******** global variables end ********
 # download plugins
@@ -77,27 +77,20 @@ function save_image() {
   docker save ${REGISTRY}/${image}:${retag} | gzip > ${TCE_BUILD_DIR}/${image}.tar.gz
 }
 
-# envoy/nginx/busybox multi-arch-support
-save_image hubble-ui v0.7.3 v0.7.3
+save_image hubble-ui v0.7.3-${GOARCH} v0.7.3
 save_image hubble-ui-backend v0.7.3-${GOARCH} v0.7.3
-save_image envoy v1.14.5 v1.14.5
-# nginx and busybox used to test
-save_image nginx latest latest
-save_image busybox latest latest
+save_image envoy v1.16.0-${GOARCH} v1.16.0
 save_image kube-proxy ${KUBE_PROXY_IMAGE_VERSION}-${GOARCH} ${KUBE_PROXY_IMAGE_VERSION}
 
-# make cilium chart
+# render cilium chart
 mkdir ${TCE_BUILD_DIR}/charts
 cp -r install/kubernetes/cilium ${TCE_BUILD_DIR}/charts/
-cp tcs-build/charts/cilium/values.yaml ${TCE_BUILD_DIR}/charts/cilium/values.yaml
-cp tcs-build/charts/cilium/templates/* ${TCE_BUILD_DIR}/charts/cilium/templates/
-sed -i "s#{{ REGISTRY }}#${REGISTRY}#g" ${TCE_BUILD_DIR}/charts/cilium/values.yaml
-sed -i "s#{{ TAG }}#${VERSION}#g" ${TCE_BUILD_DIR}/charts/cilium/values.yaml
-sed -i "s#1.9.0#${TAG}#g" ${TCE_BUILD_DIR}/charts/cilium/Chart.yaml
-# make kube-proxy-cilium chart
+sed -i "s#tag: v1.9.0#tag: ${CILIUM_VERSION}#g" ${TCE_BUILD_DIR}/charts/cilium/values.yaml
+sed -i "s#1.9.0#${CILIUM_VERSION}#g" ${TCE_BUILD_DIR}/charts/cilium/Chart.yaml
+# render kube-proxy-cilium chart
 cp -r tcs-build/charts/kube-proxy-cilium ${TCE_BUILD_DIR}/charts/
-sed -i "s#repository: registry.tce.com/infra/kube-proxy#repository: ${REGISTRY}/kube-proxy#g" ${TCE_BUILD_DIR}/charts/kube-proxy-cilium/values.yaml
 sed -i "s#tag: v1.16.6-db03827a#tag: ${KUBE_PROXY_IMAGE_VERSION}#g" ${TCE_BUILD_DIR}/charts/kube-proxy-cilium/values.yaml
+sed -i "s#v1.16.6#${KUBE_PROXY_IMAGE_VERSION}#g" ${TCE_BUILD_DIR}/charts/kube-proxy-cilium/Chart.yaml
 
 cd ${TCE_BUILD_DIR}
 tar zcf charts.tar.gz charts && rm -r charts

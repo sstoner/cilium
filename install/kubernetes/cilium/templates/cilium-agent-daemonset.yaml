@@ -38,6 +38,7 @@ spec:
 {{- if and .Values.prometheus.enabled (not .Values.prometheus.serviceMonitor.enabled) }}
         prometheus.io/port: "{{ .Values.prometheus.port }}"
         prometheus.io/scrape: "true"
+        infra.tce.io/monitor_scrape_port: "{{ .Values.prometheus.port }}"
 {{- end }}
         # This annotation plus the CriticalAddonsOnly toleration makes
         # cilium to be a critical pod in the cluster, which ensures cilium
@@ -49,6 +50,7 @@ spec:
 {{- end }}
       labels:
         k8s-app: cilium
+        app.kubernetes.io/name: cilium-agent
 {{- if .Values.keepDeprecatedLabels }}
         kubernetes.io/cluster-service: "true"
 {{- end }}

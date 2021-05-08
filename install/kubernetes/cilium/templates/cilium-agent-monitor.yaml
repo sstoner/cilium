@@ -1,0 +1,106 @@
+{{- if .Values.tcs.enableMonitor }}
+apiVersion: infra.tce.io/v1
+kind: MonitorScrapeTask
+metadata:
+  name: tcs-infra-cilium-agent
+spec:
+  scrape_configs:
+  - job_name: tcs/infra/cilium-agent
+    scrape_interval: 1m
+    scrape_timeout: 10s
+    metrics_path: /metrics
+    honor_labels: true
+    kubernetes_sd_configs:
+    - role: pod
+      namespaces:
+        names:
+        - "{{ .Release.Namespace }}"
+      selectors:
+      - role: "pod"
+        label: "app.kubernetes.io/name=cilium-agent" # label selector for app's pods
+    relabel_configs:
+    # test if scrape the target
+    # needs an annotation: "infra.tce.io/monitor_scraped: true".
+    # if not needed, drop this relabel config
+    # - source_labels: [__meta_kubernetes_pod_annotation_infra_tce_io_monitor_scraped]
+    #   action: keep
+    #   regex: "true"
+
+    # replace the target port as annotated from the annotation
+    # needs an annotation like: "infra.tce.io/monitor_scrape_port: 8080".
+    - source_labels: [__address__, __meta_kubernetes_pod_annotation_infra_tce_io_monitor_scrape_port]
+      action: replace
+      regex: ([^:]+)(?::\d+)?;(\d+)
+      replacement: $1:$2
+      target_label: __address__
+
+      # replace the metrics path
+      # needs an annotation like: "infra.tce.io/monitor_scrape_path: /metrics".
+    - source_labels: [__meta_kubernetes_pod_annotation_infra_tce_io_monitor_scrape_path]
+      regex: (.+)
+      replacement: $1
+      target_label: __metrics_path__
+
+      # set namespace label
+    - source_labels: [__meta_kubernetes_namespace]
+      target_label: namespace
+
+      # set pod name label
+    - source_labels: [__meta_kubernetes_pod_name]
+      target_label: pod
+
+      # set tcs_product label
+    - replacement: tcs
+      target_label: tcs_product
+
+      # set tcs_cluster label
+    - replacement: {{ .Values.tcs.clusterType }}
+      target_label: tcs_cluster
+
+      # set tcs_project label
+    - source_labels: [namespace]
+      target_label: tcs_project
+
+      # set tcs_app label
+    - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+      target_label: tcs_app
+
+      # if this is a tad application, use tad label
+    - source_labels: [__meta_kubernetes_pod_label_infra_tce_io_app_name]
+      regex: (.+)
+      target_label: tcs_app
+
+      # set default tcs_comp label using tcs_app
+    - source_labels: [tcs_app]
+      target_label: tcs_comp
+
+      # replace tcs_comp label using component label: app.kubernetes.io/component
+    - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_component]
+      regex: (.+)
+      target_label: tcs_comp
+
+      # replace tcs_comp label using component label: infra.tce.io/comp_name
+    - source_labels: [__meta_kubernetes_pod_label_infra_tce_io_comp_name]
+      regex: (.+)
+      target_label: tcs_comp
+
+    - source_labels: [__meta_kubernetes_pod_label_tcs_region]
+      target_label: tcs_region
+
+    - source_labels: [__meta_kubernetes_pod_label_tcs_zone]
+      target_label: tcs_zone
+
+      # set tcs_instance using pod name
+    - source_labels: [ pod ]
+      target_label: tcs_instance
+
+      # set tcs_type as tcs_comp
+    - source_labels: [tcs_comp]
+      target_label: tcs_type
+
+    metric_relabel_configs:
+    # drop some useless metrics
+    - source_labels: [ __name__ ]
+      regex: '(rest_client.*)'
+      action: drop
+{{- end }}

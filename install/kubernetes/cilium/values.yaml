@@ -7,6 +7,9 @@
 
 tcs:
   tolerations: []
+  clusterType: user
+  clusterSpec: tcs-standard
+  enableMonitor: true
 
 debug:
   enabled: false

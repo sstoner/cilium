@@ -53,10 +53,6 @@ spec:
     - replacement: tcs
       target_label: tcs_product
 
-      # set tcs_cluster label
-    - replacement: {{ .Values.tcs.clusterType }}
-      target_label: tcs_cluster
-
       # set tcs_project label
     - source_labels: [namespace]
       target_label: tcs_project

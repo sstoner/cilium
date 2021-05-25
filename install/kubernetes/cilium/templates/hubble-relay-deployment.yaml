@@ -24,16 +24,10 @@ spec:
       labels:
         k8s-app: hubble-relay
     spec:
+{{- if .Values.tcs.affinity }}
       affinity:
-        podAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-          - labelSelector:
-              matchExpressions:
-                - key: "k8s-app"
-                  operator: In
-                  values:
-                    - cilium
-            topologyKey: "kubernetes.io/hostname"
+{{- toYaml .Values.tcs.affinity | trim | nindent 8 }}
+{{- end }}
 {{- if .Values.imagePullSecrets }}
       imagePullSecrets:
 {{ toYaml .Values.imagePullSecrets | indent 8 }}
@@ -84,7 +78,7 @@ spec:
 {{- end }}
 {{- with .Values.tcs.tolerations }}
       tolerations:
-      {{- toYaml . | trim | nindent 8 }}
+      {{- toYaml . | trim | nindent 6 }}
 {{- end }}
       volumes:
       - configMap:

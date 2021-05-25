@@ -6,7 +6,17 @@
 # upgradeCompatibility: 1.8
 
 tcs:
-  tolerations: []
+  tolerations:
+  - effect: NoSchedule
+    key: node-role.kubernetes.io/master
+    operator: Exists
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: node-role.kubernetes.io/master
+                operator: Exists
   clusterType: user
   clusterSpec: tcs-standard
   enableMonitor: true
@@ -1095,7 +1105,6 @@ operator:
             values:
             - operator
         topologyKey: kubernetes.io/hostname
-
 
 
   ## Additional cilium-etcd-operator container arguments

@@ -18,10 +18,11 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cilium/cilium/pkg/source"
+
 	"github.com/cilium/cilium/api/v1/models"
 	"github.com/cilium/cilium/pkg/allocator"
 	"github.com/cilium/cilium/pkg/controller"
-	"github.com/cilium/cilium/pkg/kvstore"
 	"github.com/cilium/cilium/pkg/kvstore/store"
 	"github.com/cilium/cilium/pkg/lock"
 	nodemanager "github.com/cilium/cilium/pkg/node/manager"
@@ -70,19 +71,22 @@ type Configuration struct {
 type RemoteIdentityWatcher interface {
 	// WatchRemoteIdentities starts watching for identities in another kvstore and
 	// syncs all identities to the local identity cache.
-	WatchRemoteIdentities(backend kvstore.BackendOperations) (*allocator.RemoteCache, error)
+	WatchRemoteIdentities(alloc *allocator.Allocator) (*allocator.RemoteCache, error)
 
 	// Close stops the watcher.
 	Close()
+
+	// GetEvents
+	GetEvents() allocator.AllocatorEventChan
 }
 
 // NodeObserver returns the node store observer of the configuration
-func (c *Configuration) NodeObserver() store.Observer {
+func (c *Configuration) NodeObserver(source source.Source) store.Observer {
 	if c.nodeObserver != nil {
 		return c.nodeObserver
 	}
 
-	return nodeStore.NewNodeObserver(c.NodeManager)
+	return nodeStore.NewNodeObserver(source, c.NodeManager)
 }
 
 // ClusterMesh is a cache of multiple remote clusters

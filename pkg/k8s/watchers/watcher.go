@@ -415,6 +415,14 @@ func (k *K8sWatcher) EnableK8sWatcher(ctx context.Context) error {
 	return nil
 }
 
+func (k *K8sWatcher) EnableRemoteNodesK8sWatcher(ciliumNPClient *k8s.K8sCiliumClient) error {
+	asyncControllers := &sync.WaitGroup{}
+	asyncControllers.Add(1)
+
+	go k.ciliumNodeInit(ciliumNPClient, asyncControllers)
+	return nil
+}
+
 func (k *K8sWatcher) k8sServiceHandler() {
 	eventHandler := func(event k8s.ServiceEvent) {
 		defer event.SWG.Done()

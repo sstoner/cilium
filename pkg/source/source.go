@@ -41,6 +41,8 @@ const (
 	// Generated is the source used for generated state which can be
 	// overwritten by all other sources
 	Generated Source = "generated"
+
+	RemoteK8s Source = "remote-k8s"
 )
 
 // AllowOverwrite returns true if new state from a particular source is allowed

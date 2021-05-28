@@ -20,6 +20,14 @@ import (
 	"path"
 	"time"
 
+	"github.com/cilium/cilium/pkg/identity/cache"
+	"github.com/cilium/cilium/pkg/k8s"
+	"github.com/cilium/cilium/pkg/k8s/identitybackend"
+	kvstoreallocator "github.com/cilium/cilium/pkg/kvstore/allocator"
+	"github.com/cilium/cilium/pkg/node"
+	"github.com/cilium/cilium/pkg/option"
+	"github.com/cilium/cilium/pkg/source"
+
 	"github.com/cilium/cilium/api/v1/models"
 	"github.com/cilium/cilium/pkg/allocator"
 	"github.com/cilium/cilium/pkg/controller"
@@ -33,6 +41,11 @@ import (
 	strfmt "github.com/go-openapi/strfmt"
 	"github.com/sirupsen/logrus"
 )
+
+type IPIdentityRemoteWatcher interface {
+	Watch(ctx context.Context)
+	Close()
+}
 
 // remoteCluster represents another cluster other than the cluster the agent is
 // running in
@@ -74,7 +87,7 @@ type remoteCluster struct {
 
 	// ipCacheWatcher is the watcher that notifies about IP<->identity
 	// changes in the remote cluster
-	ipCacheWatcher *ipcache.IPIdentityWatcher
+	ipCacheWatcher IPIdentityRemoteWatcher
 
 	// remoteIdentityCache is a locally cached copy of the identity
 	// allocations in the remote cluster
@@ -90,6 +103,10 @@ type remoteCluster struct {
 
 	// lastFailure is the timestamp of the last failure
 	lastFailure time.Time
+
+	ciliumClient *k8s.K8sCiliumClient
+	// support crd and kvstore
+	remoteIdentityAllocationMode string
 }
 
 var (
@@ -157,6 +174,71 @@ func (rc *remoteCluster) releaseOldConnection() {
 }
 
 func (rc *remoteCluster) restartRemoteConnection(allocator RemoteIdentityWatcher) {
+	if rc.ciliumClient != nil {
+		rc.connectToETCD(allocator)
+	}
+
+	rc.connectToK8s(allocator)
+}
+
+func (rc *remoteCluster) connectToK8s(allocator RemoteIdentityWatcher) {
+	rc.controllers.UpdateController(rc.remoteConnectionControllerName,
+		controller.ControllerParams{
+			DoFunc: func(ctx context.Context) error {
+				remoteNodes, err := store.JoinSharedStore(store.Configuration{
+					Prefix:     path.Join(nodeStore.NodeRegisterStorePrefix),
+					KeyCreator: rc.mesh.conf.NodeKeyCreator,
+
+					CiliumClient: rc.ciliumClient,
+					Observer:     rc.mesh.conf.NodeObserver(source.Kubernetes),
+				})
+
+				if err != nil {
+					return err
+				}
+
+				remoteServices, err := store.JoinSharedStore(store.Configuration{
+					Prefix: path.Join(serviceStore.ServiceStorePrefix),
+					KeyCreator: func() store.Key {
+						svc := serviceStore.ClusterService{}
+						return &svc
+					},
+
+					CiliumClient: rc.ciliumClient,
+					Observer: &remoteServiceObserver{
+						remoteCluster: rc,
+						swg:           rc.swg,
+					},
+				})
+
+				remoteAllocator, err := rc.remoteAllocator(allocator)
+				if err != nil {
+
+				}
+
+				remoteIdentityCache, err := allocator.WatchRemoteIdentities(remoteAllocator)
+				if err != nil {
+
+				}
+				ipCacheWatcher := ipcache.NewK8sIPIdentityWatcher(rc.ciliumClient)
+				ipCacheWatcher.Watch(ctx)
+
+				rc.mutex.Lock()
+				rc.remoteNodes = remoteNodes
+				rc.remoteServices = remoteServices
+
+				rc.ipCacheWatcher = ipCacheWatcher
+				rc.remoteIdentityCache = remoteIdentityCache
+				rc.mutex.Unlock()
+				panic("TODO")
+			},
+			StopFunc: func(ctx context.Context) error {
+				panic("TODO")
+			},
+		})
+}
+
+func (rc *remoteCluster) connectToETCD(allocator RemoteIdentityWatcher) {
 	rc.controllers.UpdateController(rc.remoteConnectionControllerName,
 		controller.ControllerParams{
 			DoFunc: func(ctx context.Context) error {
@@ -188,7 +270,7 @@ func (rc *remoteCluster) restartRemoteConnection(allocator RemoteIdentityWatcher
 					KeyCreator:              rc.mesh.conf.NodeKeyCreator,
 					SynchronizationInterval: time.Minute,
 					Backend:                 backend,
-					Observer:                rc.mesh.conf.NodeObserver(),
+					Observer:                rc.mesh.conf.NodeObserver(source.KVStore),
 				})
 				if err != nil {
 					backend.Close()
@@ -215,7 +297,11 @@ func (rc *remoteCluster) restartRemoteConnection(allocator RemoteIdentityWatcher
 				}
 				rc.swg.Stop()
 
-				remoteIdentityCache, err := allocator.WatchRemoteIdentities(backend)
+				remoteAlloc, err := rc.remoteAllocator(allocator)
+				if err != nil {
+					return err
+				}
+				remoteIdentityCache, err := allocator.WatchRemoteIdentities(remoteAlloc)
 				if err != nil {
 					remoteServices.Close(context.TODO())
 					remoteNodes.Close(context.TODO())
@@ -246,7 +332,6 @@ func (rc *remoteCluster) restartRemoteConnection(allocator RemoteIdentityWatcher
 		},
 	)
 }
-
 func (rc *remoteCluster) onInsert(allocator RemoteIdentityWatcher) {
 	rc.getLogger().Info("New remote cluster configuration")
 
@@ -317,6 +402,60 @@ func (rc *remoteCluster) isReady() bool {
 	defer rc.mutex.RUnlock()
 
 	return rc.isReadyLocked()
+}
+
+func (rc *remoteCluster) remoteAllocator(m RemoteIdentityWatcher) (*allocator.Allocator, error) {
+	var (
+		remoteAllocatorBackend allocator.Backend
+		remoteAlloc            *allocator.Allocator
+		err                    error
+	)
+
+	switch rc.remoteIdentityAllocationMode {
+	case option.IdentityAllocationModeCRD:
+		log.Debug("Identity remote allocation backed by CRD")
+		remoteAllocatorBackend, err = identitybackend.NewCRDBackend(identitybackend.CRDBackendConfiguration{
+			NodeName: node.GetExternalIPv4().String(),
+			// identityStore
+			Store:   nil,
+			Client:  rc.ciliumClient,
+			KeyType: cache.GlobalIdentity{},
+		})
+
+		if err != nil {
+			return nil, err
+		}
+
+	case option.IdentityAllocationModeKVstore:
+		log.Debug("Identity remote allocation backed by KVStore")
+		backend, errChan := kvstore.NewClient(context.TODO(), kvstore.EtcdBackendName,
+			map[string]string{
+				kvstore.EtcdOptionConfig: rc.configPath,
+			},
+			&kvstore.ExtraOptions{NoLockQuorumCheck: true})
+
+		err, isErr := <-errChan
+		if isErr {
+			if backend != nil {
+				backend.Close()
+			}
+			rc.getLogger().WithError(err).Warning("Unable to establish etcd connection to remote cluster")
+			return nil, err
+		}
+
+		remoteAllocatorBackend, err = kvstoreallocator.NewKVStoreBackend(cache.IdentitiesPath, "", cache.GlobalIdentity{}, backend)
+		if err != nil {
+			return nil, fmt.Errorf("Error setting up remote allocator backend: %s", err)
+		}
+
+	}
+
+	remoteAlloc, err = allocator.NewAllocator(cache.GlobalIdentity{}, remoteAllocatorBackend, allocator.WithEvents(m.GetEvents()))
+	if err != nil {
+		return nil, fmt.Errorf("Unable to initialize remote Identity Allocator: %s", err)
+	}
+
+	return remoteAlloc, nil
 }
 
 func (rc *remoteCluster) isReadyLocked() bool {

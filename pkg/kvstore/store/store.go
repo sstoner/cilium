@@ -21,6 +21,17 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cilium/cilium/pkg/k8s"
+	cilium_v2 "github.com/cilium/cilium/pkg/k8s/apis/cilium.io/v2"
+	"github.com/cilium/cilium/pkg/k8s/informer"
+	slim_corev1 "github.com/cilium/cilium/pkg/k8s/slim/k8s/api/core/v1"
+	"github.com/cilium/cilium/pkg/k8s/utils"
+	"github.com/cilium/cilium/pkg/metrics"
+	nodeTypes "github.com/cilium/cilium/pkg/node/types"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/client-go/tools/cache"
+
 	"github.com/cilium/cilium/pkg/controller"
 	"github.com/cilium/cilium/pkg/defaults"
 	"github.com/cilium/cilium/pkg/kvstore"
@@ -43,8 +54,8 @@ const (
 
 var (
 	controllers controller.Manager
-
-	log = logging.DefaultLogger.WithField(logfields.LogSubsys, "shared-store")
+	k8sSvcCache = k8s.NewServiceCache(nil)
+	log         = logging.DefaultLogger.WithField(logfields.LogSubsys, "shared-store")
 )
 
 // KeyCreator is the function to create a new empty Key instances. Store
@@ -81,6 +92,8 @@ type Configuration struct {
 	Observer Observer
 
 	Context context.Context
+
+	CiliumClient *k8s.K8sCiliumClient
 }
 
 // validate is invoked by JoinSharedStore to validate and complete the
@@ -102,7 +115,7 @@ func (c *Configuration) validate() error {
 		c.SharedKeyDeleteDelay = defaults.NodeDeleteDelay
 	}
 
-	if c.Backend == nil {
+	if c.Backend == nil && c.CiliumClient == nil {
 		c.Backend = kvstore.Client()
 	}
 
@@ -147,6 +160,8 @@ type SharedStore struct {
 	sharedKeys map[string]Key
 
 	kvstoreWatcher *kvstore.Watcher
+
+	k8sWatcher cache.Controller
 }
 
 // Observer receives events when objects in the store mutate
@@ -485,7 +500,17 @@ func (s *SharedStore) deleteSharedKey(name string) {
 func (s *SharedStore) listAndStartWatcher() error {
 	listDone := make(chan struct{})
 
-	go s.watcher(listDone)
+	if s.conf.CiliumClient != nil {
+		if strings.Contains(s.conf.Prefix, "node") {
+			s.k8sWatcher = s.k8sNodeWatcher(listDone)
+		} else {
+			s.k8sWatcher = s.k8sServiceWatcher(listDone)
+		}
+
+		go s.k8sWatcher.Run(listDone)
+	} else {
+		go s.kvWatcher(listDone)
+	}
 
 	select {
 	case <-listDone:
@@ -496,7 +521,7 @@ func (s *SharedStore) listAndStartWatcher() error {
 	return nil
 }
 
-func (s *SharedStore) watcher(listDone chan struct{}) {
+func (s *SharedStore) kvWatcher(listDone chan struct{}) {
 	s.kvstoreWatcher = s.backend.ListAndWatch(s.conf.Context, s.name+"-watcher", s.conf.Prefix, watcherChanSize)
 
 	for event := range s.kvstoreWatcher.Events {
@@ -533,5 +558,178 @@ func (s *SharedStore) watcher(listDone chan struct{}) {
 				s.deleteSharedKey(keyName)
 			}
 		}
+	}
+}
+
+func (s *SharedStore) k8sServiceWatcher(listDone chan struct{}) cache.Controller {
+	swgSvcs := lock.NewStoppableWaitGroup()
+
+	serviceOptsModifier, err := utils.GetServiceListOptionsModifier()
+	if err != nil {
+		log.WithError(err).Fatal("Error creating service option modifier")
+	}
+	// Watch for v1.Service changes and push changes into ServiceCache
+	_, svcController := informer.NewInformer(
+		cache.NewFilteredListWatchFromClient(s.conf.CiliumClient.CiliumV2().RESTClient(),
+			"services", v1.NamespaceAll, serviceOptsModifier),
+		&slim_corev1.Service{},
+		0,
+		cache.ResourceEventHandlerFuncs{
+			AddFunc: func(obj interface{}) {
+				metrics.EventTSK8s.SetToCurrentTime()
+				if k8sSvc := k8s.ObjToV1Services(obj); k8sSvc != nil {
+					log.Debugf("Received service addition %+v", k8sSvc)
+
+					k8sSvcCache.UpdateService(k8sSvc, swgSvcs)
+				}
+			},
+			UpdateFunc: func(oldObj, newObj interface{}) {
+				metrics.EventTSK8s.SetToCurrentTime()
+				if oldk8sSvc := k8s.ObjToV1Services(oldObj); oldk8sSvc != nil {
+					if newk8sSvc := k8s.ObjToV1Services(newObj); newk8sSvc != nil {
+						if oldk8sSvc.DeepEqual(newk8sSvc) {
+							return
+						}
+
+						k8sSvcCache.UpdateService(newk8sSvc, swgSvcs)
+						log.Debugf("Received service update %+v", newk8sSvc)
+
+					}
+				}
+			},
+			DeleteFunc: func(obj interface{}) {
+				metrics.EventTSK8s.SetToCurrentTime()
+				k8sSvc := k8s.ObjToV1Services(obj)
+				if k8sSvc == nil {
+					return
+				}
+				log.Debugf("Received service deletion %+v", k8sSvc)
+				k8sSvcCache.DeleteService(k8sSvc, swgSvcs)
+			},
+		},
+		nil,
+	)
+
+	// process events from serviceCache
+	go s.k8sServiceHandler()
+
+	return svcController
+}
+
+func (s *SharedStore) k8sNodeWatcher(listDone chan struct{}) cache.Controller {
+	_, ciliumNodeInformer := informer.NewInformer(
+		cache.NewListWatchFromClient(s.conf.CiliumClient.CiliumV2().RESTClient(),
+			cilium_v2.CNPluralName, v1.NamespaceAll, fields.Everything()),
+		&cilium_v2.CiliumNode{},
+		0,
+		cache.ResourceEventHandlerFuncs{
+			AddFunc: func(obj interface{}) {
+				if ciliumNode := k8s.ObjToCiliumNode(obj); ciliumNode != nil {
+					n := nodeTypes.ParseCiliumNode(ciliumNode)
+					if n.IsLocal() {
+						return
+					}
+
+					s.OnUpdateStore(&n)
+				}
+			},
+			UpdateFunc: func(oldObj, newObj interface{}) {
+				if oldCN := k8s.ObjToCiliumNode(oldObj); oldCN != nil {
+					if ciliumNode := k8s.ObjToCiliumNode(newObj); ciliumNode != nil {
+						n := nodeTypes.ParseCiliumNode(ciliumNode)
+						if n.IsLocal() {
+							return
+						}
+
+						s.OnUpdateStore(&n)
+					}
+				}
+			},
+			DeleteFunc: func(obj interface{}) {
+				ciliumNode := k8s.ObjToCiliumNode(obj)
+				if ciliumNode == nil {
+					return
+				}
+
+				n := nodeTypes.ParseCiliumNode(ciliumNode)
+
+				s.OnDeleteStore(&n)
+			},
+		},
+		k8s.ConvertToCiliumNode,
+	)
+
+	return ciliumNodeInformer
+}
+
+func (s *SharedStore) OnUpdateStore(n Key) {
+	jsonValue, err := n.Marshal()
+	if err != nil {
+		return
+	}
+	keyName := s.keyPath(n)
+
+	keyName = strings.TrimPrefix(keyName, s.conf.Prefix)
+	if keyName[0] == '/' {
+		keyName = keyName[1:]
+	}
+
+	logger := s.getLogger().WithFields(logrus.Fields{
+		"key":       keyName,
+		"eventType": jsonValue,
+	})
+
+	if err := s.updateKey(keyName, jsonValue); err != nil {
+		logger.WithError(err).Warningf("Unable to unmarshal store value: %s", string(jsonValue))
+	}
+}
+func (s *SharedStore) OnDeleteStore(n Key) {
+	keyName := s.keyPath(n)
+
+	keyName = strings.TrimPrefix(keyName, s.conf.Prefix)
+	if keyName[0] == '/' {
+		keyName = keyName[1:]
+	}
+
+	s.deleteSharedKey(keyName)
+}
+
+func (s *SharedStore) k8sServiceHandler() {
+	serviceHandler := func(event k8s.ServiceEvent) {
+		defer event.SWG.Done()
+
+		svc := k8s.NewClusterService(event.ID, event.Service, event.Endpoints)
+		svc.Cluster = option.Config.ClusterName
+
+		log.WithFields(logrus.Fields{
+			logfields.K8sSvcName:   event.ID.Name,
+			logfields.K8sNamespace: event.ID.Namespace,
+			"action":               event.Action.String(),
+			"service":              event.Service.String(),
+			"endpoints":            event.Endpoints.String(),
+			"shared":               event.Service.Shared,
+		}).Debug("Kubernetes service definition changed")
+
+		if !event.Service.Shared {
+			// The annotation may have been added, delete an eventual existing service
+			s.DeleteLocalKey(context.TODO(), &svc)
+			return
+		}
+
+		switch event.Action {
+		case k8s.UpdateService:
+			s.OnUpdateStore(&svc)
+
+		case k8s.DeleteService:
+			s.OnDeleteStore(&svc)
+		}
+	}
+	for {
+		event, ok := <-k8sSvcCache.Events
+		if !ok {
+			return
+		}
+
+		serviceHandler(event)
 	}
 }

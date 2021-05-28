@@ -58,19 +58,23 @@ var (
 // NodeObserver implements the store.Observer interface and delegates update
 // and deletion events to the node object itself.
 type NodeObserver struct {
+	source  source.Source
 	manager NodeManager
 }
 
 // NewNodeObserver returns a new NodeObserver associated with the specified
 // node manager
-func NewNodeObserver(manager NodeManager) *NodeObserver {
-	return &NodeObserver{manager: manager}
+func NewNodeObserver(source source.Source, manager NodeManager) *NodeObserver {
+	return &NodeObserver{
+		source:  source,
+		manager: manager,
+	}
 }
 
 func (o *NodeObserver) OnUpdate(k store.Key) {
 	if n, ok := k.(*nodeTypes.Node); ok {
 		nodeCopy := n.DeepCopy()
-		nodeCopy.Source = source.KVStore
+		nodeCopy.Source = o.source
 		o.manager.NodeUpdated(*nodeCopy)
 	}
 }
@@ -78,7 +82,7 @@ func (o *NodeObserver) OnUpdate(k store.Key) {
 func (o *NodeObserver) OnDelete(k store.NamedKey) {
 	if n, ok := k.(*nodeTypes.Node); ok {
 		nodeCopy := n.DeepCopy()
-		nodeCopy.Source = source.KVStore
+		nodeCopy.Source = o.source
 		o.manager.NodeDeleted(*nodeCopy)
 	}
 }
@@ -192,7 +196,7 @@ func (nr *NodeRegistrar) RegisterNode(n *nodeTypes.Node, manager NodeManager) er
 	nodeStore, err := store.JoinSharedStore(store.Configuration{
 		Prefix:     NodeStorePrefix,
 		KeyCreator: KeyCreator,
-		Observer:   NewNodeObserver(manager),
+		Observer:   NewNodeObserver(source.KVStore, manager),
 	})
 	if err != nil {
 		return err

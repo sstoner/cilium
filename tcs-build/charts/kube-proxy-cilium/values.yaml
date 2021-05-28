@@ -5,6 +5,7 @@
 # override by --set tcs.apiserver=""
 tcs:
   apiServer: https://127.0.0.1:6443
+  networkType: cilium
 
 name: kube-proxy-cilium
 
